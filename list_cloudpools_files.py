@@ -1,43 +1,51 @@
 # Query Platform API to list files that have been CloudPool'd
-# joshua.lay@dell.com
+# This is meant to be run from a cluster node directly and not remotely
 #
-# Tested on OneFS 8.0.0.4 with default python libraries
-# Last update 15-May-2018
+# Tested on OneFS 8.0.0.4 with default Python 2.6.1 libraries
+#
+# joshua.lay@dell.com
+# Last update 17-May-2018
 
 
 from optparse import OptionParser
 import getpass
 import httplib
-import csv
 import sys
 import socket
 import base64
 import json
 
 
-parser = OptionParser()
-parser.add_option('-u', '--user', help='required, user account used to query the Platform API', dest='USER')
-parser.add_option('-i', '--ip', help='IP address used to query the Platform API', dest='IP', default=socket.gethostbyname(socket.gethostname()))
-parser.add_option('-p', '--port', help='TCP port used in URL to query the API, defaults to 8080', dest='PORT', default=8080)
-parser.add_option('--csv', help='write output in CSV format, default is list of files', dest='CSV', action="store_true", default=False)
-parser.add_option('-n', '--no-header', help='disable header when printing CSV', dest="NO_HEADER", action='store_true', default=False)
-parser.add_option('-s', '--show-count', help='print sum of files in jobs-files jobs from the Platform API, this over-rides printing of file names', dest='SHOW_COUNT', action='store_true',  default=False)
+usage = "Usage: %prog --user USER [options]"
+parser = OptionParser(usage=usage, version='%prog 0.4')
+parser.add_option('-u', '--user', help='User name used to query the Platform API, if not provided as argument you will be prompted to enter user name', dest='USER')
+parser.add_option('-p', '--password', help='Password for user name, if not provided as argument you will be prompted to enter password', dest='PASSWORD')
+parser.add_option('-i', '--ip', help='IP address used to query the Platform API, if not provided script attempts to automatically detect local cluster IP or name', dest='IP', default=socket.gethostbyname(socket.gethostname()))
+parser.add_option('-P', '--port', help='TCP port used to query the Platform API, defaults to %default', type='int', dest='PORT', default=8080)
+parser.add_option('--csv', help='Print output in CSV format, default is list of files', dest='CSV', action="store_true", default=False)
+parser.add_option('--no-header', help='Disable header when printing CSV', dest="NO_HEADER", action='store_true', default=False)
+parser.add_option('--show-count', help='Print sum of total file counts in jobs-files from the Platform API, this overrides printing of files', dest='SHOW_COUNT', action='store_true',  default=False)
 opts, args = parser.parse_args()
 
 
 if (opts.USER == None):
+    opts.USER = raw_input("Enter user: ")
+
+if (opts.USER == ''):    
     parser.print_help()
-    sys.exit("Username Required")
+    sys.exit("User name Required")
 
 
-PASSWORD = getpass.getpass('Enter password: ')
+if (opts.PASSWORD == None):
+    opts.PASSWORD = getpass.getpass('Enter password for %s: ' % (opts.USER))
 
-if (PASSWORD == ''):
+if (opts.PASSWORD == ''):
+    parser.print_help()
     sys.exit("Password Required")
 
 
 HEADERS = {
-    'Authorization': "Basic " + base64.b64encode(opts.USER + ':' + PASSWORD),
+    'Authorization': "Basic " + base64.b64encode(opts.USER + ':' + opts.PASSWORD),
     'Cache-Control': "no-cache"
 }
 
@@ -47,10 +55,14 @@ def get_jobs(ip=opts.IP, port=opts.PORT):
     conn = httplib.HTTPSConnection(ip, port)
     conn.request('GET', '/platform/3/cloud/jobs', headers=HEADERS)
     response = conn.getresponse()
-    if (response.status != 200):
+    if (response.status == 401):
+        print('401: HTTP Authorization Failed')
+        sys.exit(1)    
+    elif (response.status != 200):
+        print('HTTP GET Failed on /platform/3/cloud/jobs')
         print("Response Status: " + str(response.status))
         print("Response Reason: " + str(response.reason))
-        sys.exit('HTTP GET Failed on /platform/3/cloud/jobs')
+        sys.exit(1)
     else:
         #print(response.status)
         data = response.read()
@@ -70,10 +82,14 @@ def add_jobs_files(job, ip=opts.IP, port=opts.PORT):
     conn = httplib.HTTPSConnection(ip, port)
     conn.request('GET', '/platform/3/cloud/jobs-files/' + str(job['id']), headers=HEADERS)
     response = conn.getresponse()
+    if (response.status == 401):
+        print('401: HTTP Authorization Failed')
+        sys.exit(1)     
     if (response.status != 200):
+        print('HTTP GET Failed on /platform/3/cloud/jobs')
         print("Response Status: " + str(response.status))
-        print("Response Reason: " + str(response.reason))        
-        sys.exit('HTTP GET Failed on /platform/3/cloud/jobs-files/<id>')
+        print("Response Reason: " + str(response.reason))
+        sys.exit(1)
     else:
         #print(response.reason)
         data = response.read()
@@ -90,26 +106,20 @@ def add_jobs_files(job, ip=opts.IP, port=opts.PORT):
 
 def print_filenames(jobs):
     ''' Print all files in jobs-files, one per line'''
-    print
-    
     for job in jobs:
         #print(type(job))
         files = job['jobs-files']['files']    # list of dicts
         if (len(files) > 0):
             for file in files:
                 print(file['name'])
-    print # adds extra newline at end of output
 
 
 def print_csv(jobs):
     ''' Print all files in jobs-files, output in CSV format (table) '''
-    print
-
     if (opts.NO_HEADER == False):
         print('%s,%s,%s,%s,%s,%s' % ('file_name', 'job_engine_job_id', 'cloudpools_job_id', 'completion_time', 'create_time', 'state_change_time'))
     
     for job in jobs:
-        #print(type(job))
         files = job['jobs-files']['files']    # list of dicts
         if (len(files) > 0):
             for file in files:
@@ -121,7 +131,7 @@ def print_csv(jobs):
                 state_change_time = job['state_change_time']
                 # file_name, job_engine_job_id, cloudpools_job_id, completion_time, create_time, state_change_time
                 print('%s,%s,%s,%s,%s,%s' % (file_name, job_engine_job_id, cloudpools_job_id, completion_time, create_time, state_change_time))
-    print # adds extra newline at end of output
+   
             
 def print_count(jobs):
     ''' Print sum of CloudPool file counts from jobs-file API '''
@@ -132,7 +142,6 @@ def print_count(jobs):
 
     print('Total number of CloudPools files: %s' % (count))
         
-
 
 def main():
     #print("executing main")
@@ -151,8 +160,5 @@ def main():
         print_filenames(jobs_list)
     
 
-
 if __name__ == "__main__":
     main()
-    
-    
