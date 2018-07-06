@@ -148,6 +148,11 @@ def main():
 
     jobs_list = get_jobs()
 
+    if (len(jobs_list) < 1):
+        print('No CloudPools Jobs Files Found\n')
+        sys.exit(0)
+
+
     for job in jobs_list:
         job = add_jobs_files(job)
     
