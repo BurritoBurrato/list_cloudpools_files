@@ -1,6 +1,6 @@
 # list_cloudpools_files
-Query Platform API to list files that have been CloudPool'd
-This is meant to be run from a cluster node directly and not remotely
+Query OneFS Platform API to get list of files that have been CloudPool'd.
+Run from a cluster node directly (not remotely).
 
 - Username is required.  This is used in the HTTP request.
 - If password is not provided in command, you will be prompted to provide one.
