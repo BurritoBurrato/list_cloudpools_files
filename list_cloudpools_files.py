@@ -112,6 +112,9 @@ def print_filenames(jobs):
         if (len(files) > 0):
             for file in files:
                 print(file['name'])
+        else:
+            print('No CloudPools Jobs Files Found\n')
+            sys.exit(0)
 
 
 def print_csv(jobs):
@@ -131,6 +134,9 @@ def print_csv(jobs):
                 state_change_time = job['state_change_time']
                 # file_name, job_engine_job_id, cloudpools_job_id, completion_time, create_time, state_change_time
                 print('%s,%s,%s,%s,%s,%s' % (file_name, job_engine_job_id, cloudpools_job_id, completion_time, create_time, state_change_time))
+        else:
+            print('No CloudPools Jobs Files Found\n')
+            sys.exit(0)
    
             
 def print_count(jobs):
@@ -147,11 +153,6 @@ def main():
     #print("executing main")
 
     jobs_list = get_jobs()
-
-    if (len(jobs_list) < 1):
-        print('No CloudPools Jobs Files Found\n')
-        sys.exit(0)
-
 
     for job in jobs_list:
         job = add_jobs_files(job)
